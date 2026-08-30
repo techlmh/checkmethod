@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+  <style>
+    body { font-family: 'Noto Sans KR', sans-serif; margin: 20px; background-color: #f0f2f5; }
+    .container { max-width: 1300px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    h2 { border-bottom: 3px solid #9c27b0; padding-bottom: 10px; margin-top: 0; color: #9c27b0; display: flex; justify-content: space-between; align-items: center;}
+    .stat-badge { font-size: 14px; background: #f3e5f5; color: #9c27b0; padding: 6px 12px; border-radius: 15px; font-weight: normal; margin-right: 10px;}
+    
+    .search-box { margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: #fafafa; padding: 15px; border-radius: 6px; border: 1px solid #ddd;}
+    #consultantFilter { padding: 11px; font-size: 15px; border: 1px solid #ccc; border-radius: 4px; min-width: 180px; background-color: white; cursor: pointer; }
+    #searchInput { flex: 1; min-width: 250px; padding: 12px; font-size: 15px; border: 1px solid #ccc; border-radius: 4px; }
+    
+    .btn { padding: 12px 18px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold; color: white; transition: 0.2s;}
+    .btn:hover { opacity: 0.9; }
+    .btn-green { background-color: #4CAF50; }
+    .btn-blue { background-color: #2196F3; }
+    .btn-purple { background-color: #9c27b0; }
+    .btn-orange { background-color: #ff9800; font-size: 13px; padding: 6px 12px;}
+    .btn-gray { background-color: #777; }
+
+    table.dashboard-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+    table.dashboard-table th, table.dashboard-table td { border: 1px solid #ddd; padding: 10px 6px; text-align: center; vertical-align: middle; }
+    table.dashboard-table th { background-color: #9c27b0; color: white; font-weight: bold; }
+    table.dashboard-table tr:nth-child(even) { background-color: #f9f9f9; }
+    table.dashboard-table tr:hover { background-color: #f3e5f5; }
+
+    #loadingMsg { color: #f44336; font-weight: bold; text-align: center; font-size: 18px; margin: 20px 0; }
+
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 999; }
+    .modal-content { display: none; position: fixed; top: 5%; left: 10%; width: 80%; height: 85%; background: white; z-index: 1000; padding: 30px; border-radius: 8px; overflow-y: auto; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; position: sticky; top: -30px; background: white; z-index: 10; }
+    .modal-header h3 { margin: 0; font-size: 22px; }
+
+    table.preview-table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+    table.preview-table th, table.preview-table td { border: 1px solid #000; padding: 12px; text-align: left; vertical-align: top; }
+    table.preview-table th { background-color: #f2f2f2; text-align: center; font-weight: bold; }
+    .preview-img { max-width: 400px; max-height: 300px; display: block; margin-top: 15px; border: 1px solid #ddd; border-radius: 4px; }
+
+    #globalLoading { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; color: white; flex-direction: column; justify-content: center; align-items: center; }
+    .spinner { border: 6px solid #f3f3f3; border-top: 6px solid #9c27b0; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    @media print {
+      body * { visibility: hidden; }
+      #printArea, #printArea * { visibility: visible; }
+      #printArea { position: absolute; left: 0; top: 0; width: 100%; padding: 0; margin: 0; }
+      .no-print { display: none !important; }
+      table.preview-table th, table.preview-table td { border: 1px solid #000 !important; }
+      .page-break { page-break-after: always; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="globalLoading">
+  <div class="spinner"></div>
+  <h2 id="globalLoadingText">작업을 처리 중입니다... 잠시만 기다려주세요.</h2>
+</div>
+
+<div class="container no-print">
+  <h2>
+    <span>🏫 학교 반영 현황 관리자 대시보드</span>
+    <div style="font-size: 14px; font-weight: normal;">
+      <span class="stat-badge" id="dataCountBadge">조회된 학교: 0건</span>
+      <!-- 바로가기 버튼 추가 -->
+      <button class="btn btn-blue" style="padding: 8px 15px;" onclick="goToAdmin()">📊 컨설팅 내역 보기 ➔</button>
+    </div>
+  </h2>
+  
+  <div class="search-box">
+    <select id="consultantFilter" onchange="applyFilters()">
+      <option value="">👤 모든 위원 (전체 보기)</option>
+    </select>
+    <input type="text" id="searchInput" placeholder="학교명, 담당자명, 내용 등으로 검색..." onkeyup="applyFilters()">
+    <button class="btn btn-green" onclick="loadData()">새로고침</button>
+    <button class="btn btn-purple" onclick="openBatchPreview()">📋 전체 학교 반영결과 일괄 보기 / PDF 저장</button>
+  </div>
+
+  <div id="loadingMsg">데이터를 불러오는 중입니다... 잠시만 기다려주세요.</div>
+
+  <table id="dataTable" class="dashboard-table" style="display:none;">
+    <thead>
+      <tr>
+        <th style="width: 8%;">위원명</th>
+        <th style="width: 12%;">학교명</th>
+        <th style="width: 10%;">담당자명</th>
+        <th style="width: 10%;">1학년</th>
+        <th style="width: 10%;">2학년</th>
+        <th style="width: 10%;">3학년</th>
+        <th style="width: 10%;">학년전체</th>
+        <th style="width: 18%;">학교 제출일시</th>
+        <th style="width: 12%;">반영결과 확인</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+</div>
+
+<div class="modal-overlay" id="modalOverlay"></div>
+<div class="modal-content" id="modalContent">
+  <div class="modal-header no-print">
+    <h3 id="modalSchoolName">반영 결과 미리보기</h3>
+    <div>
+      <button class="btn btn-purple" onclick="window.print()">🖨️ 인쇄 (PDF 저장)</button>
+      <button class="btn btn-gray" onclick="closeModal()">닫기</button>
+    </div>
+  </div>
+  <div id="printArea"></div>
+</div>
+
+<script>
+  let serverData = [];          
+  let currentFilteredData = []; 
+
+  window.onload = function() { loadData(); };
+
+  // 링크 이동 함수 (수정됨)
+  function goToAdmin() {
+    google.script.run
+      .withSuccessHandler(function(url) {
+        window.open(url + '?mode=admin', '_blank');
+      })
+      .getScriptUrl();
+  }
+
+  function loadData() {
+    document.getElementById('loadingMsg').style.display = 'block';
+    document.getElementById('dataTable').style.display = 'none';
+    
+    google.script.run
+      .withSuccessHandler(function(data) {
+        data.sort(function(a, b) {
+          var cmp = (a.consultantName || "").localeCompare(b.consultantName || "", 'ko-KR');
+          if (cmp === 0) return (a.schoolName || "").localeCompare(b.schoolName || "", 'ko-KR');
+          return cmp;
+        });
+
+        serverData = data;
+        currentFilteredData = [...data];
+        populateConsultantDropdown(data);
+        renderTable(currentFilteredData);
+      })
+      .getAllDataForAdmin();
+  }
+
+  function populateConsultantDropdown(data) {
+    var select = document.getElementById('consultantFilter');
+    var currentSelection = select.value; 
+    select.innerHTML = '<option value="">👤 모든 위원 (전체 보기)</option>';
+    
+    var uniqueNames = [...new Set(data.map(item => item.consultantName))].filter(Boolean);
+    uniqueNames.forEach(function(name) {
+      var option = document.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      select.appendChild(option);
+    });
+    if (uniqueNames.includes(currentSelection)) select.value = currentSelection;
+  }
+
+  function applyFilters() {
+    var searchInput = document.getElementById('searchInput').value.toLowerCase();
+    var consultantSelect = document.getElementById('consultantFilter').value;
+
+    currentFilteredData = serverData.filter(function(group) {
+      var groupText = (group.consultantName + " " + group.schoolName + " " + group.repName).toLowerCase();
+      group.items.forEach(function(item) { groupText += " " + (item.reflection || "").toLowerCase(); });
+
+      var textMatch = groupText.indexOf(searchInput) > -1;
+      var consultantMatch = (consultantSelect === "") || (group.consultantName === consultantSelect);
+      return textMatch && consultantMatch;
+    });
+    renderTable(currentFilteredData); 
+  }
+
+  function getReflectionStatus(items, grade) {
+    var gradeItems = items.filter(function(i) { return i.grade === grade; });
+    if (gradeItems.length === 0) return "<span style='color:#ccc;'>-</span>"; 
+
+    var completed = 0;
+    gradeItems.forEach(function(i) {
+      if (i.reflection && i.reflection.trim() !== "") completed++;
+    });
+
+    if (completed === 0) return "<span style='color:#f44336; font-weight:bold;'>미작성</span>";
+    if (completed < gradeItems.length) return "<span style='color:#ff9800; font-weight:bold;'>부분완료</span>";
+    return "<span style='color:#4CAF50; font-weight:bold;'>완료</span>";
+  }
+
+  function renderTable(groups) {
+    var tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+    document.getElementById('dataCountBadge').innerText = "조회된 학교: " + groups.length + "건";
+    
+    if(groups.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9">조건에 일치하는 데이터가 없습니다.</td></tr>';
+    } else {
+      for (var i = 0; i < groups.length; i++) {
+        var group = groups[i];
+        
+        var displayRepName = group.repName ? "<span style='color:#2196F3; font-weight:bold;'>" + group.repName + "</span>" : "<span style='color:#ccc;'>미입력</span>";
+        var displaySubmitTime = group.schoolSubmitTime ? "<span style='color:#2e7d32;'>" + group.schoolSubmitTime + "</span>" : "<span style='color:#f44336;'>미제출</span>";
+
+        var tr = document.createElement('tr');
+        tr.innerHTML = 
+          '<td>' + group.consultantName + '</td>' +
+          '<td style="font-weight:bold;">' + group.schoolName + '</td>' +
+          '<td>' + displayRepName + '</td>' +
+          '<td>' + getReflectionStatus(group.items, "1학년") + '</td>' +
+          '<td>' + getReflectionStatus(group.items, "2학년") + '</td>' +
+          '<td>' + getReflectionStatus(group.items, "3학년") + '</td>' +
+          '<td>' + getReflectionStatus(group.items, "학년전체") + '</td>' +
+          '<td>' + displaySubmitTime + '</td>' +
+          '<td><button class="btn btn-orange" onclick="openPreview(' + i + ')">상세보기</button></td>';
+        tbody.appendChild(tr);
+      }
+    }
+    document.getElementById('loadingMsg').style.display = 'none';
+    document.getElementById('dataTable').style.display = 'table';
+  }
+
+  function getPreviewUrl(url) {
+    if (!url) return '';
+    var match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    return match ? 'https://drive.google.com/thumbnail?id=' + match[1] + '&sz=w1000' : url;
+  }
+
+  function openPreview(index) {
+    document.getElementById('modalSchoolName').innerText = currentFilteredData[index].schoolName + " 반영 결과 상세보기";
+    generatePreviewHTML([currentFilteredData[index]]);
+    document.getElementById('modalOverlay').style.display = 'block';
+    document.getElementById('modalContent').style.display = 'block';
+  }
+
+  function openBatchPreview() {
+    if(currentFilteredData.length === 0) { alert("조회된 데이터가 없습니다."); return; }
+    document.getElementById('modalSchoolName').innerText = "조회된 학교 반영결과 일괄 보기";
+    generatePreviewHTML(currentFilteredData);
+    document.getElementById('modalOverlay').style.display = 'block';
+    document.getElementById('modalContent').style.display = 'block';
+  }
+
+  function closeModal() {
+    document.getElementById('modalOverlay').style.display = 'none';
+    document.getElementById('modalContent').style.display = 'none';
+  }
+
+  function generatePreviewHTML(groupsData) {
+    var printArea = document.getElementById('printArea');
+    printArea.innerHTML = ''; 
+
+    for(var g = 0; g < groupsData.length; g++) {
+      var group = groupsData[g];
+      var wrapper = document.createElement('div');
+      wrapper.className = "page-break"; 
+
+      var html = '<h2 style="text-align:center; margin-bottom:10px; font-size:24px;">' + group.schoolName + ' 교육과정 컨설팅 반영 결과</h2>';
+      html += '<p style="text-align:right; font-size:16px;"><strong>담당자: </strong>' + (group.repName || '미입력') + ' / <strong>제출일시: </strong>' + (group.schoolSubmitTime || '미제출') + '</p>';
+      
+      html += '<table class="preview-table">';
+      html += '<thead><tr><th style="width:12%">학년/구분</th><th style="width:45%">컨설팅 검토 내용</th><th style="width:43%; background-color:#f3e5f5;">학교 반영 결과</th></tr></thead><tbody>';
+
+      for(var i = 0; i < group.items.length; i++) {
+        var item = group.items[i];
+        var displayImg = getPreviewUrl(item.imageUrl);
+        var imgTag = displayImg ? '<br><br><img src="' + displayImg + '" class="preview-img">' : '';
+        var safeContent = item.content.replace(/\n/g, '<br>');
+        var safeReflection = item.reflection ? item.reflection.replace(/\n/g, '<br>') : '<span style="color:#f44336;">(작성되지 않음)</span>';
+
+        html += '<tr>';
+        html += '<td style="text-align:center;">' + item.grade + '<br>[' + item.type + ']</td>';
+        html += '<td>' + safeContent + imgTag + '</td>';
+        html += '<td style="color:#4a148c; font-weight:bold;">' + safeReflection + '</td>';
+        html += '</tr>';
+      }
+      
+      html += '</tbody></table>';
+      wrapper.innerHTML = html;
+      printArea.appendChild(wrapper);
+    }
+  }
+</script>
+
+</body>
+</html>
