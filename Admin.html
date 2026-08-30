@@ -10,10 +10,13 @@
   <style>
     body { font-family: 'Noto Sans KR', sans-serif; margin: 20px; background-color: #f0f2f5; }
     .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-    h2 { border-bottom: 3px solid #1976d2; padding-bottom: 10px; margin-top: 0; color: #1976d2; }
+    h2 { border-bottom: 3px solid #1976d2; padding-bottom: 10px; margin-top: 0; color: #1976d2; display: flex; justify-content: space-between; align-items: flex-end;}
+    .stat-badge { font-size: 14px; background: #e3f2fd; color: #1976d2; padding: 5px 12px; border-radius: 15px; font-weight: normal; }
     
-    .search-box { margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-    #searchInput { flex: 1; min-width: 300px; padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; }
+    .search-box { margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: #fafafa; padding: 15px; border-radius: 6px; border: 1px solid #ddd;}
+    
+    #consultantFilter { padding: 11px; font-size: 15px; border: 1px solid #ccc; border-radius: 4px; min-width: 180px; background-color: white; cursor: pointer; }
+    #searchInput { flex: 1; min-width: 250px; padding: 12px; font-size: 15px; border: 1px solid #ccc; border-radius: 4px; }
     
     .btn { padding: 12px 18px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold; color: white; transition: 0.2s;}
     .btn:hover { opacity: 0.9; }
@@ -48,7 +51,7 @@
     .spinner { border: 6px solid #f3f3f3; border-top: 6px solid #2196F3; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px; }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-    /* 인쇄용 CSS (브라우저 기본 인쇄 기능 활용 시) */
+    /* 인쇄용 CSS */
     @media print {
       body * { visibility: hidden; }
       #printArea, #printArea * { visibility: visible; }
@@ -61,20 +64,27 @@
 </head>
 <body>
 
-<!-- 전체 화면 로딩바 -->
 <div id="globalLoading">
   <div class="spinner"></div>
   <h2 id="globalLoadingText">작업을 처리 중입니다... 잠시만 기다려주세요.</h2>
 </div>
 
 <div class="container no-print">
-  <h2>📊 컨설팅 제출 내역 관리자 대시보드</h2>
+  <h2>
+    📊 컨설팅 제출 내역 관리자 대시보드
+    <span class="stat-badge" id="dataCountBadge">조회된 데이터: 0건</span>
+  </h2>
   
   <div class="search-box">
-    <input type="text" id="searchInput" placeholder="학교명, 위원명 등으로 검색해보세요..." onkeyup="filterTable()">
+    <!-- 위원명 필터용 드롭다운 추가 -->
+    <select id="consultantFilter" onchange="applyFilters()">
+      <option value="">👤 모든 위원 (전체 보기)</option>
+    </select>
+    
+    <input type="text" id="searchInput" placeholder="학교명, 내용 등으로 추가 검색..." onkeyup="applyFilters()">
     <button class="btn btn-green" onclick="loadData()">새로고침</button>
-    <button class="btn btn-blue" onclick="openBatchPreview()">📋 전체 일괄 보기</button>
-    <button class="btn btn-purple" onclick="downloadZip()">📥 전체 PDF 다운로드 (ZIP 압축)</button>
+    <button class="btn btn-blue" onclick="openBatchPreview()">📋 조회 내역 일괄 보기</button>
+    <button class="btn btn-purple" onclick="downloadZip()">📥 화면 조회 내역 PDF 다운로드</button>
   </div>
 
   <div id="loadingMsg">데이터를 불러오는 중입니다... 잠시만 기다려주세요.</div>
@@ -106,25 +116,84 @@
       <button class="btn btn-gray" onclick="closeModal()">닫기</button>
     </div>
   </div>
-  
-  <!-- 인쇄/미리보기 시 보여질 영역 -->
   <div id="printArea"></div>
 </div>
 
 <script>
-  let serverData = [];
+  let serverData = [];          // 서버에서 가져온 전체 원본 데이터
+  let currentFilteredData = []; // 필터링/검색이 적용된 현재 데이터 (미리보기, PDF 연동)
 
   window.onload = function() { loadData(); };
 
   function loadData() {
     document.getElementById('loadingMsg').style.display = 'block';
     document.getElementById('dataTable').style.display = 'none';
+    
     google.script.run
       .withSuccessHandler(function(data) {
+        
+        // ★ 데이터 정렬 로직: 1순위 위원명 가나다순 -> 2순위 학교명 가나다순
+        data.sort(function(a, b) {
+          var nameA = a.consultantName || "";
+          var nameB = b.consultantName || "";
+          var cmp = nameA.localeCompare(nameB, 'ko-KR');
+          if (cmp === 0) {
+            var schoolA = a.schoolName || "";
+            var schoolB = b.schoolName || "";
+            return schoolA.localeCompare(schoolB, 'ko-KR');
+          }
+          return cmp;
+        });
+
         serverData = data;
-        renderTable(data);
+        currentFilteredData = [...data]; // 처음엔 필터 없이 원본과 동일하게 복사
+        
+        populateConsultantDropdown(data);
+        renderTable(currentFilteredData);
       })
       .getAllDataForAdmin();
+  }
+
+  // ★ 위원명 드롭다운 목록 자동 생성
+  function populateConsultantDropdown(data) {
+    var select = document.getElementById('consultantFilter');
+    var currentSelection = select.value; // 기존 선택값 기억
+    select.innerHTML = '<option value="">👤 모든 위원 (전체 보기)</option>';
+    
+    var uniqueNames = [...new Set(data.map(item => item.consultantName))].filter(Boolean);
+    uniqueNames.forEach(function(name) {
+      var option = document.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      select.appendChild(option);
+    });
+    
+    // 새로고침 시 기존 선택 유지
+    if (uniqueNames.includes(currentSelection)) {
+      select.value = currentSelection;
+    }
+  }
+
+  // ★ 위원명 필터 + 텍스트 검색 동시 적용
+  function applyFilters() {
+    var searchInput = document.getElementById('searchInput').value.toLowerCase();
+    var consultantSelect = document.getElementById('consultantFilter').value;
+
+    currentFilteredData = serverData.filter(function(group) {
+      // 검색을 위한 모든 텍스트 합치기
+      var groupText = (group.consultantName + " " + group.schoolName + " " + group.timestamp).toLowerCase();
+      group.items.forEach(function(item) {
+        groupText += " " + (item.grade + item.type + item.content).toLowerCase();
+      });
+
+      // 필터 조건 확인
+      var textMatch = groupText.indexOf(searchInput) > -1;
+      var consultantMatch = (consultantSelect === "") || (group.consultantName === consultantSelect);
+
+      return textMatch && consultantMatch;
+    });
+
+    renderTable(currentFilteredData); // 필터링된 배열로 다시 표 그리기
   }
 
   function getCountDisplay(items, grade) {
@@ -139,8 +208,11 @@
     var tbody = document.getElementById('tableBody');
     tbody.innerHTML = '';
     
+    // 뱃지 업데이트
+    document.getElementById('dataCountBadge').innerText = "조회된 데이터: " + groups.length + "건";
+    
     if(groups.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="8">아직 제출된 데이터가 없습니다.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8">조건에 일치하는 데이터가 없습니다.</td></tr>';
     } else {
       for (var i = 0; i < groups.length; i++) {
         var group = groups[i];
@@ -161,34 +233,25 @@
     document.getElementById('dataTable').style.display = 'table';
   }
 
-  function filterTable() {
-    var input = document.getElementById('searchInput').value.toLowerCase();
-    var trs = document.getElementById('tableBody').getElementsByTagName('tr');
-    for (var i = 0; i < trs.length; i++) {
-      trs[i].style.display = trs[i].textContent.toLowerCase().indexOf(input) > -1 ? '' : 'none';
-    }
-  }
-
-  // ★ 구글 드라이브 이미지 안 나오는 문제 해결: 썸네일 API 사용
   function getPreviewUrl(url) {
     if (!url) return '';
     var match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
     return match ? 'https://drive.google.com/thumbnail?id=' + match[1] + '&sz=w1000' : url;
   }
 
-  // 단일 학교 미리보기 모달 생성
+  // 모달 열기 (현재 조회된 리스트의 index 기반)
   function openPreview(index) {
-    document.getElementById('modalSchoolName').innerText = serverData[index].schoolName + " 미리보기";
-    generatePreviewHTML([serverData[index]]);
+    document.getElementById('modalSchoolName').innerText = currentFilteredData[index].schoolName + " 미리보기";
+    generatePreviewHTML([currentFilteredData[index]]);
     document.getElementById('modalOverlay').style.display = 'block';
     document.getElementById('modalContent').style.display = 'block';
   }
 
-  // 전체 학교 일괄 미리보기
+  // 전체 학교 일괄 모달 열기 (필터링된 결과만)
   function openBatchPreview() {
-    if(serverData.length === 0) { alert("데이터가 없습니다."); return; }
-    document.getElementById('modalSchoolName').innerText = "전체 학교 일괄 미리보기";
-    generatePreviewHTML(serverData);
+    if(currentFilteredData.length === 0) { alert("조회된 데이터가 없습니다."); return; }
+    document.getElementById('modalSchoolName').innerText = "조회된 학교 일괄 미리보기";
+    generatePreviewHTML(currentFilteredData);
     document.getElementById('modalOverlay').style.display = 'block';
     document.getElementById('modalContent').style.display = 'block';
   }
@@ -198,7 +261,6 @@
     document.getElementById('modalContent').style.display = 'none';
   }
 
-  // 화면에 표(HTML)를 그려주는 공통 함수
   function generatePreviewHTML(groupsData) {
     var printArea = document.getElementById('printArea');
     printArea.innerHTML = ''; 
@@ -206,7 +268,7 @@
     for(var g = 0; g < groupsData.length; g++) {
       var group = groupsData[g];
       var wrapper = document.createElement('div');
-      wrapper.className = "page-break"; // 학교마다 페이지 나누기
+      wrapper.className = "page-break"; 
 
       var html = '<h2 style="text-align:center; margin-bottom:20px; font-size:24px;">' + group.schoolName + ' 교육과정 컨설팅 검토 결과</h2>';
       html += '<table class="preview-table">';
@@ -231,9 +293,9 @@
     }
   }
 
-  // ★ PDF 생성 및 ZIP 압축 로직 (가장 핵심적인 기능)
+  // PDF 생성 및 ZIP 다운로드 (필터링된 결과만 생성)
   async function downloadZip() {
-    if(serverData.length === 0) {
+    if(currentFilteredData.length === 0) {
       alert("다운로드할 데이터가 없습니다.");
       return;
     }
@@ -245,28 +307,26 @@
     try {
       loadingText.innerText = "1단계: 드라이브에서 이미지를 추출 중입니다... (데이터량에 따라 1~2분 소요될 수 있습니다)";
       
-      // 구글 드라이브 권한 문제(CORS) 방지를 위해 서버에서 직접 이미지 원본을 가져옴
       var urlsToFetch = [];
-      serverData.forEach(group => { group.items.forEach(item => { if(item.imageUrl) urlsToFetch.push(item.imageUrl); }); });
-      urlsToFetch = [...new Set(urlsToFetch)]; // 중복 제거
+      // 화면에 필터링 된 데이터(currentFilteredData)의 이미지만 가져옴
+      currentFilteredData.forEach(group => { group.items.forEach(item => { if(item.imageUrl) urlsToFetch.push(item.imageUrl); }); });
+      urlsToFetch = [...new Set(urlsToFetch)]; 
 
       var b64Map = await new Promise((resolve, reject) => {
         google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getImagesBase64Mapping(urlsToFetch);
       });
 
-      loadingText.innerText = "2단계: 각 학교별 PDF를 생성하고 압축하고 있습니다...";
+      loadingText.innerText = "2단계: 총 " + currentFilteredData.length + "개 학교의 PDF를 생성하고 있습니다...";
       var zip = new JSZip();
 
-      // 화면 뒤에 임시로 그릴 영역
       var hiddenContainer = document.createElement('div');
       hiddenContainer.style.position = 'absolute';
       hiddenContainer.style.left = '-9999px';
       document.body.appendChild(hiddenContainer);
 
-      for (let i = 0; i < serverData.length; i++) {
-        let group = serverData[i];
+      for (let i = 0; i < currentFilteredData.length; i++) {
+        let group = currentFilteredData[i];
         
-        // PDF용 개별 테이블 HTML 구성
         let html = '<div style="padding:20px; font-family:sans-serif; width:750px; background:white; color:black;">';
         html += '<h2 style="text-align:center; margin-bottom:20px;">' + group.schoolName + ' 교육과정 컨설팅 검토 결과</h2>';
         html += '<table style="width:100%; border-collapse:collapse;">';
@@ -276,7 +336,7 @@
         
         for(let j=0; j<group.items.length; j++) {
           let item = group.items[j];
-          let imgB64 = b64Map[item.imageUrl]; // 다운로드된 Base64 데이터 삽입 (CORS 해결)
+          let imgB64 = b64Map[item.imageUrl]; 
           let imgTag = imgB64 ? '<br><br><img src="' + imgB64 + '" style="max-width:100%; max-height:350px;">' : '';
           let safeContent = item.content.replace(/\n/g, '<br>');
           
@@ -290,25 +350,26 @@
         
         hiddenContainer.innerHTML = html;
 
-        // html2pdf 설정 (화면을 PDF Blob 파일로 변환)
         let opt = {
           margin: 10,
-          filename: group.schoolName + '.pdf',
+          // 파일명에 위원명도 포함시켜 묶음 다운로드 시 관리 용이하게 구성
+          filename: group.consultantName + '_' + group.schoolName + '_컨설팅결과.pdf',
           image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2 }, // 화질 개선
+          html2canvas: { scale: 2 },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
-        // PDF 생성 후 zip 파일 내부에 추가
         let pdfBlob = await html2pdf().set(opt).from(hiddenContainer.firstElementChild).output('blob');
-        zip.file(group.schoolName + "_컨설팅결과.pdf", pdfBlob);
+        
+        // zip 압축파일 내에서 위원명 이름으로 폴더를 나누어 저장
+        zip.folder(group.consultantName).file(group.schoolName + "_컨설팅결과.pdf", pdfBlob);
       }
 
       document.body.removeChild(hiddenContainer);
 
       loadingText.innerText = "마무리 작업 중입니다...";
       let content = await zip.generateAsync({type:"blob"});
-      saveAs(content, "중학교_컨설팅결과_전체모음.zip");
+      saveAs(content, "중학교_컨설팅결과_다운로드.zip");
 
       loadingBox.style.display = 'none';
       alert("다운로드가 성공적으로 완료되었습니다!");
