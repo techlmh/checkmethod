@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <!-- PDF 및 ZIP 생성용 외부 라이브러리 추가 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+  <style>
+    body { font-family: 'Noto Sans KR', sans-serif; margin: 20px; background-color: #f0f2f5; }
+    .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    h2 { border-bottom: 3px solid #1976d2; padding-bottom: 10px; margin-top: 0; color: #1976d2; }
+    
+    .search-box { margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    #searchInput { flex: 1; min-width: 300px; padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; }
+    
+    .btn { padding: 12px 18px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: bold; color: white; transition: 0.2s;}
+    .btn:hover { opacity: 0.9; }
+    .btn-blue { background-color: #2196F3; }
+    .btn-green { background-color: #4CAF50; }
+    .btn-purple { background-color: #9c27b0; }
+    .btn-orange { background-color: #ff9800; font-size: 13px; padding: 6px 12px;}
+    .btn-gray { background-color: #777; }
+
+    table.dashboard-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 15px; }
+    table.dashboard-table th, table.dashboard-table td { border: 1px solid #ddd; padding: 12px 8px; text-align: center; vertical-align: middle; }
+    table.dashboard-table th { background-color: #1976d2; color: white; font-weight: bold; }
+    table.dashboard-table tr:nth-child(even) { background-color: #f9f9f9; }
+    table.dashboard-table tr:hover { background-color: #e3f2fd; }
+
+    #loadingMsg { color: #f44336; font-weight: bold; text-align: center; font-size: 18px; margin: 20px 0; }
+
+    /* 모달창 디자인 */
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 999; }
+    .modal-content { display: none; position: fixed; top: 5%; left: 10%; width: 80%; height: 85%; background: white; z-index: 1000; padding: 30px; border-radius: 8px; overflow-y: auto; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; position: sticky; top: -30px; background: white; z-index: 10; }
+    .modal-header h3 { margin: 0; font-size: 22px; }
+
+    /* 미리보기 안쪽의 표 디자인 */
+    table.preview-table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+    table.preview-table th, table.preview-table td { border: 1px solid #000; padding: 15px; text-align: left; vertical-align: top; }
+    table.preview-table th { background-color: #f2f2f2; text-align: center; font-weight: bold; }
+    .preview-img { max-width: 450px; max-height: 350px; display: block; margin-top: 15px; border: 1px solid #ddd; border-radius: 4px; }
+
+    /* 화면 전체를 가리는 로딩 화면 (PDF 추출용) */
+    #globalLoading { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; color: white; flex-direction: column; justify-content: center; align-items: center; }
+    .spinner { border: 6px solid #f3f3f3; border-top: 6px solid #2196F3; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    /* 인쇄용 CSS (브라우저 기본 인쇄 기능 활용 시) */
+    @media print {
+      body * { visibility: hidden; }
+      #printArea, #printArea * { visibility: visible; }
+      #printArea { position: absolute; left: 0; top: 0; width: 100%; padding: 0; margin: 0; }
+      .no-print { display: none !important; }
+      table.preview-table th, table.preview-table td { border: 1px solid #000 !important; }
+      .page-break { page-break-after: always; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- 전체 화면 로딩바 -->
+<div id="globalLoading">
+  <div class="spinner"></div>
+  <h2 id="globalLoadingText">작업을 처리 중입니다... 잠시만 기다려주세요.</h2>
+</div>
+
+<div class="container no-print">
+  <h2>📊 컨설팅 제출 내역 관리자 대시보드</h2>
+  
+  <div class="search-box">
+    <input type="text" id="searchInput" placeholder="학교명, 위원명 등으로 검색해보세요..." onkeyup="filterTable()">
+    <button class="btn btn-green" onclick="loadData()">새로고침</button>
+    <button class="btn btn-blue" onclick="openBatchPreview()">📋 전체 일괄 보기</button>
+    <button class="btn btn-purple" onclick="downloadZip()">📥 전체 PDF 다운로드 (ZIP 압축)</button>
+  </div>
+
+  <div id="loadingMsg">데이터를 불러오는 중입니다... 잠시만 기다려주세요.</div>
+
+  <table id="dataTable" class="dashboard-table" style="display:none;">
+    <thead>
+      <tr>
+        <th style="width: 10%;">위원명</th>
+        <th style="width: 15%;">학교명</th>
+        <th style="width: 9%;">1학년</th>
+        <th style="width: 9%;">2학년</th>
+        <th style="width: 9%;">3학년</th>
+        <th style="width: 9%;">학년전체</th>
+        <th style="width: 25%;">제출일시</th>
+        <th style="width: 14%;">관리</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+</div>
+
+<!-- 미리보기 모달창 -->
+<div class="modal-overlay" id="modalOverlay"></div>
+<div class="modal-content" id="modalContent">
+  <div class="modal-header no-print">
+    <h3 id="modalSchoolName">미리보기</h3>
+    <div>
+      <button class="btn btn-blue" onclick="window.print()">🖨️ 인쇄 (PDF 저장)</button>
+      <button class="btn btn-gray" onclick="closeModal()">닫기</button>
+    </div>
+  </div>
+  
+  <!-- 인쇄/미리보기 시 보여질 영역 -->
+  <div id="printArea"></div>
+</div>
+
+<script>
+  let serverData = [];
+
+  window.onload = function() { loadData(); };
+
+  function loadData() {
+    document.getElementById('loadingMsg').style.display = 'block';
+    document.getElementById('dataTable').style.display = 'none';
+    google.script.run
+      .withSuccessHandler(function(data) {
+        serverData = data;
+        renderTable(data);
+      })
+      .getAllDataForAdmin();
+  }
+
+  function getCountDisplay(items, grade) {
+    let count = 0;
+    for(let i=0; i<items.length; i++){ if(items[i].grade === grade) count++; }
+    if (count === 0) return "";
+    if (count === 1) return "✔";
+    return count + "개";
+  }
+
+  function renderTable(groups) {
+    var tbody = document.getElementById('tableBody');
+    tbody.innerHTML = '';
+    
+    if(groups.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8">아직 제출된 데이터가 없습니다.</td></tr>';
+    } else {
+      for (var i = 0; i < groups.length; i++) {
+        var group = groups[i];
+        var tr = document.createElement('tr');
+        tr.innerHTML = 
+          '<td>' + group.consultantName + '</td>' +
+          '<td style="font-weight:bold;">' + group.schoolName + '</td>' +
+          '<td>' + getCountDisplay(group.items, "1학년") + '</td>' +
+          '<td>' + getCountDisplay(group.items, "2학년") + '</td>' +
+          '<td>' + getCountDisplay(group.items, "3학년") + '</td>' +
+          '<td>' + getCountDisplay(group.items, "학년전체") + '</td>' +
+          '<td>' + group.timestamp + '</td>' +
+          '<td><button class="btn btn-orange" onclick="openPreview(' + i + ')">미리보기</button></td>';
+        tbody.appendChild(tr);
+      }
+    }
+    document.getElementById('loadingMsg').style.display = 'none';
+    document.getElementById('dataTable').style.display = 'table';
+  }
+
+  function filterTable() {
+    var input = document.getElementById('searchInput').value.toLowerCase();
+    var trs = document.getElementById('tableBody').getElementsByTagName('tr');
+    for (var i = 0; i < trs.length; i++) {
+      trs[i].style.display = trs[i].textContent.toLowerCase().indexOf(input) > -1 ? '' : 'none';
+    }
+  }
+
+  // ★ 구글 드라이브 이미지 안 나오는 문제 해결: 썸네일 API 사용
+  function getPreviewUrl(url) {
+    if (!url) return '';
+    var match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    return match ? 'https://drive.google.com/thumbnail?id=' + match[1] + '&sz=w1000' : url;
+  }
+
+  // 단일 학교 미리보기 모달 생성
+  function openPreview(index) {
+    document.getElementById('modalSchoolName').innerText = serverData[index].schoolName + " 미리보기";
+    generatePreviewHTML([serverData[index]]);
+    document.getElementById('modalOverlay').style.display = 'block';
+    document.getElementById('modalContent').style.display = 'block';
+  }
+
+  // 전체 학교 일괄 미리보기
+  function openBatchPreview() {
+    if(serverData.length === 0) { alert("데이터가 없습니다."); return; }
+    document.getElementById('modalSchoolName').innerText = "전체 학교 일괄 미리보기";
+    generatePreviewHTML(serverData);
+    document.getElementById('modalOverlay').style.display = 'block';
+    document.getElementById('modalContent').style.display = 'block';
+  }
+
+  function closeModal() {
+    document.getElementById('modalOverlay').style.display = 'none';
+    document.getElementById('modalContent').style.display = 'none';
+  }
+
+  // 화면에 표(HTML)를 그려주는 공통 함수
+  function generatePreviewHTML(groupsData) {
+    var printArea = document.getElementById('printArea');
+    printArea.innerHTML = ''; 
+
+    for(var g = 0; g < groupsData.length; g++) {
+      var group = groupsData[g];
+      var wrapper = document.createElement('div');
+      wrapper.className = "page-break"; // 학교마다 페이지 나누기
+
+      var html = '<h2 style="text-align:center; margin-bottom:20px; font-size:24px;">' + group.schoolName + ' 교육과정 컨설팅 검토 결과</h2>';
+      html += '<table class="preview-table">';
+      html += '<thead><tr><th style="width:20%">학교명</th><th style="width:15%">학년 구분</th><th style="width:65%">검토 내용 및 사진</th></tr></thead><tbody>';
+
+      for(var i = 0; i < group.items.length; i++) {
+        var item = group.items[i];
+        var displayImg = getPreviewUrl(item.imageUrl);
+        var imgTag = displayImg ? '<br><br><img src="' + displayImg + '" class="preview-img">' : '';
+        var safeContent = item.content.replace(/\n/g, '<br>');
+
+        html += '<tr>';
+        html += '<td style="text-align:center;">' + (i === 0 ? group.schoolName : '') + '</td>';
+        html += '<td style="text-align:center;">' + item.grade + '</td>';
+        html += '<td><strong>[' + item.type + ']</strong><br><br>' + safeContent + imgTag + '</td>';
+        html += '</tr>';
+      }
+      
+      html += '</tbody></table>';
+      wrapper.innerHTML = html;
+      printArea.appendChild(wrapper);
+    }
+  }
+
+  // ★ PDF 생성 및 ZIP 압축 로직 (가장 핵심적인 기능)
+  async function downloadZip() {
+    if(serverData.length === 0) {
+      alert("다운로드할 데이터가 없습니다.");
+      return;
+    }
+
+    var loadingBox = document.getElementById('globalLoading');
+    var loadingText = document.getElementById('globalLoadingText');
+    loadingBox.style.display = 'flex';
+    
+    try {
+      loadingText.innerText = "1단계: 드라이브에서 이미지를 추출 중입니다... (데이터량에 따라 1~2분 소요될 수 있습니다)";
+      
+      // 구글 드라이브 권한 문제(CORS) 방지를 위해 서버에서 직접 이미지 원본을 가져옴
+      var urlsToFetch = [];
+      serverData.forEach(group => { group.items.forEach(item => { if(item.imageUrl) urlsToFetch.push(item.imageUrl); }); });
+      urlsToFetch = [...new Set(urlsToFetch)]; // 중복 제거
+
+      var b64Map = await new Promise((resolve, reject) => {
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getImagesBase64Mapping(urlsToFetch);
+      });
+
+      loadingText.innerText = "2단계: 각 학교별 PDF를 생성하고 압축하고 있습니다...";
+      var zip = new JSZip();
+
+      // 화면 뒤에 임시로 그릴 영역
+      var hiddenContainer = document.createElement('div');
+      hiddenContainer.style.position = 'absolute';
+      hiddenContainer.style.left = '-9999px';
+      document.body.appendChild(hiddenContainer);
+
+      for (let i = 0; i < serverData.length; i++) {
+        let group = serverData[i];
+        
+        // PDF용 개별 테이블 HTML 구성
+        let html = '<div style="padding:20px; font-family:sans-serif; width:750px; background:white; color:black;">';
+        html += '<h2 style="text-align:center; margin-bottom:20px;">' + group.schoolName + ' 교육과정 컨설팅 검토 결과</h2>';
+        html += '<table style="width:100%; border-collapse:collapse;">';
+        html += '<thead><tr><th style="border:1px solid #000; padding:10px; width:20%; background-color:#f2f2f2;">학교명</th>';
+        html += '<th style="border:1px solid #000; padding:10px; width:15%; background-color:#f2f2f2;">학년 구분</th>';
+        html += '<th style="border:1px solid #000; padding:10px; width:65%; background-color:#f2f2f2;">검토 내용 및 사진</th></tr></thead><tbody>';
+        
+        for(let j=0; j<group.items.length; j++) {
+          let item = group.items[j];
+          let imgB64 = b64Map[item.imageUrl]; // 다운로드된 Base64 데이터 삽입 (CORS 해결)
+          let imgTag = imgB64 ? '<br><br><img src="' + imgB64 + '" style="max-width:100%; max-height:350px;">' : '';
+          let safeContent = item.content.replace(/\n/g, '<br>');
+          
+          html += '<tr>';
+          html += '<td style="border:1px solid #000; padding:10px; text-align:center;">' + (j===0 ? group.schoolName : '') + '</td>';
+          html += '<td style="border:1px solid #000; padding:10px; text-align:center;">' + item.grade + '</td>';
+          html += '<td style="border:1px solid #000; padding:10px;"><strong>[' + item.type + ']</strong><br><br>' + safeContent + imgTag + '</td>';
+          html += '</tr>';
+        }
+        html += '</tbody></table></div>';
+        
+        hiddenContainer.innerHTML = html;
+
+        // html2pdf 설정 (화면을 PDF Blob 파일로 변환)
+        let opt = {
+          margin: 10,
+          filename: group.schoolName + '.pdf',
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2 }, // 화질 개선
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        // PDF 생성 후 zip 파일 내부에 추가
+        let pdfBlob = await html2pdf().set(opt).from(hiddenContainer.firstElementChild).output('blob');
+        zip.file(group.schoolName + "_컨설팅결과.pdf", pdfBlob);
+      }
+
+      document.body.removeChild(hiddenContainer);
+
+      loadingText.innerText = "마무리 작업 중입니다...";
+      let content = await zip.generateAsync({type:"blob"});
+      saveAs(content, "중학교_컨설팅결과_전체모음.zip");
+
+      loadingBox.style.display = 'none';
+      alert("다운로드가 성공적으로 완료되었습니다!");
+
+    } catch (error) {
+      loadingBox.style.display = 'none';
+      alert("오류가 발생했습니다: " + error.toString());
+    }
+  }
+</script>
+
+</body>
+</html>
