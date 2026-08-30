@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <!-- PDF 생성용 라이브러리 추가 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  
+  <style>
+    body { font-family: 'Noto Sans KR', sans-serif; margin: 20px; background-color: #f5f5f5; }
+    .container { max-width: 1000px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    h2 { border-bottom: 3px solid #4CAF50; padding-bottom: 10px; margin-top: 0; color: #388E3C; }
+    
+    .search-box { background: #e8f5e9; padding: 20px; border-radius: 6px; border: 1px solid #c8e6c9; text-align: center; margin-bottom: 20px; }
+    .search-box input { padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; width: 250px; text-align: center;}
+    
+    .btn { padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 15px; font-weight: bold; color: white; transition: 0.2s;}
+    .btn:hover { opacity: 0.9; }
+    .btn-green { background-color: #4CAF50; }
+    .btn-blue { background-color: #2196F3; }
+    .btn-purple { background-color: #9c27b0; }
+    .btn-gray { background-color: #777; }
+    
+    .form-group { margin-bottom: 20px; }
+    .form-group label { font-weight: bold; display: block; margin-bottom: 8px; font-size: 16px; color: #333;}
+    .form-group input { padding: 10px; width: 250px; font-size: 15px; border: 1px solid #ccc; border-radius: 4px; }
+    
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 15px; }
+    th, td { border: 1px solid #ddd; padding: 12px 10px; vertical-align: top; }
+    th { background-color: #f2f2f2; text-align: center; font-weight: bold; }
+    
+    textarea.reflection-input { width: 100%; height: 100px; padding: 10px; box-sizing: border-box; border: 1px solid #4CAF50; border-radius: 4px; resize: vertical; }
+    .preview-img { max-width: 300px; max-height: 200px; display: block; margin-top: 10px; border: 1px solid #ddd; border-radius: 4px; }
+    
+    .hidden { display: none; }
+    #loadingMsg { color: #2196F3; font-weight: bold; text-align: center; font-size: 16px; margin: 10px 0; display: none; }
+    
+    .school-title { font-size: 22px; font-weight: bold; margin-bottom: 15px; color: #2c3e50; }
+
+    /* 전체 화면 로딩바 (PDF 변환 시 사용) */
+    #globalLoading { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; color: white; flex-direction: column; justify-content: center; align-items: center; }
+    .spinner { border: 6px solid #f3f3f3; border-top: 6px solid #4CAF50; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- PDF 다운로드 시 나타나는 로딩 화면 -->
+<div id="globalLoading">
+  <div class="spinner"></div>
+  <h2 id="globalLoadingText">PDF 파일을 생성 중입니다... 잠시만 기다려주세요.</h2>
+</div>
+
+<div class="container">
+  <h2>🏫 학교 담당자 컨설팅 결과 확인 및 반영</h2>
+
+  <!-- 1. 나이스 번호 조회 화면 -->
+  <div id="searchScreen">
+    <div class="search-box">
+      <p style="margin-top:0; font-size:16px; color:#555;">우리 학교의 <strong>나이스(NEIS) 번호</strong>를 입력하여 컨설팅 의견을 조회하세요.</p>
+      <input type="text" id="neisInput" placeholder="예: S0100001">
+      <button class="btn btn-green" onclick="fetchSchoolData()">조회하기</button>
+      <div id="loadingMsg">데이터를 불러오는 중입니다...</div>
+    </div>
+  </div>
+
+  <!-- 2. 의견 확인 및 반영 입력 화면 -->
+  <div id="inputScreen" class="hidden">
+    <div class="school-title" id="displaySchoolName"></div>
+    
+    <div class="form-group">
+      <label>👤 학교 담당자(작성자) 성함</label>
+      <input type="text" id="repName" placeholder="성함을 입력해주세요">
+    </div>
+
+    <div style="background:#fff3cd; padding:12px; border-radius:4px; margin-bottom:15px; color:#856404; font-size:14px;">
+      💡 각 학년별 컨설팅 검토 내용을 확인하신 후, 우측 <strong>[반영 여부 및 조치사항]</strong> 칸에 결과를 작성해주세요.<br>
+      작성을 마치면 하단의 '미리보기' 버튼을 눌러 확인 후 제출할 수 있습니다.
+    </div>
+
+    <table id="feedbackTable">
+      <thead>
+        <tr>
+          <th style="width: 10%;">학년</th>
+          <th style="width: 10%;">구분</th>
+          <th style="width: 45%;">컨설팅 검토 내용</th>
+          <th style="width: 35%; background-color:#e8f5e9;">반영 여부 및 조치사항 입력</th>
+        </tr>
+      </thead>
+      <tbody id="feedbackTableBody">
+      </tbody>
+    </table>
+
+    <div style="text-align: center; margin-top: 30px;">
+      <button type="button" class="btn btn-blue" onclick="showPreview()">미리보기 화면으로 이동</button>
+    </div>
+  </div>
+
+  <!-- 3. 미리보기 및 최종 제출/PDF 화면 -->
+  <div id="previewScreen" class="hidden">
+    <h3 style="color:#d32f2f;">최종 확인 (미리보기)</h3>
+    <div style="margin-bottom: 10px; font-size:16px;">
+      <strong>담당자 성함: </strong> <span id="previewRepName"></span>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 10%;">학년</th>
+          <th style="width: 45%;">컨설팅 검토 내용</th>
+          <th style="width: 45%; background-color:#e8f5e9;">반영 결과</th>
+        </tr>
+      </thead>
+      <tbody id="previewTableBody">
+      </tbody>
+    </table>
+
+    <div style="text-align: center; margin-top: 30px; display: flex; justify-content: center; gap: 10px;">
+      <button type="button" class="btn btn-gray" onclick="hidePreview()">수정하기 (이전으로)</button>
+      <button type="button" class="btn btn-purple" id="btnDownloadPdf" onclick="downloadPdf()">📥 PDF 다운로드 (보관용)</button>
+      <button type="button" class="btn btn-green" onclick="submitFinalReflection()">✅ 최종 제출하기 (시트에 저장)</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let currentSchoolData = null;
+
+  // 구글 썸네일 API로 이미지 변환
+  function getPreviewUrl(url) {
+    if (!url) return '';
+    var match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    return match ? 'https://drive.google.com/thumbnail?id=' + match[1] + '&sz=w1000' : url;
+  }
+
+  // 1. 나이스 번호 조회
+  function fetchSchoolData() {
+    var neis = document.getElementById('neisInput').value.trim();
+    if (!neis) { alert("나이스 번호를 입력해주세요."); return; }
+
+    document.getElementById('loadingMsg').style.display = 'block';
+
+    google.script.run
+      .withSuccessHandler(function(data) {
+        document.getElementById('loadingMsg').style.display = 'none';
+        if (data.items.length === 0) {
+          alert("해당 학교(" + data.schoolName + ")에 등록된 컨설팅 의견이 아직 없습니다.");
+          return;
+        }
+        currentSchoolData = data;
+        renderInputForm();
+      })
+      .withFailureHandler(function(error) {
+        document.getElementById('loadingMsg').style.display = 'none';
+        alert(error);
+      })
+      .getSchoolDataByNeis(neis);
+  }
+
+  // 2. 입력 폼 렌더링
+  function renderInputForm() {
+    document.getElementById('searchScreen').classList.add('hidden');
+    document.getElementById('inputScreen').classList.remove('hidden');
+    
+    document.getElementById('displaySchoolName').innerText = "🏫 " + currentSchoolData.schoolName;
+    document.getElementById('repName').value = currentSchoolData.repName || ""; 
+
+    var tbody = document.getElementById('feedbackTableBody');
+    tbody.innerHTML = '';
+
+    currentSchoolData.items.forEach(function(item, index) {
+      var displayImg = getPreviewUrl(item.imageUrl);
+      var imgTag = displayImg ? '<br><img src="' + displayImg + '" class="preview-img">' : '';
+      var safeContent = item.content.replace(/\n/g, '<br>');
+
+      var tr = document.createElement('tr');
+      tr.innerHTML = 
+        '<td style="text-align:center;">' + item.grade + '</td>' +
+        '<td style="text-align:center; font-weight:bold;">' + item.type + '</td>' +
+        '<td>' + safeContent + imgTag + '</td>' +
+        '<td><textarea class="reflection-input" id="reflection_' + index + '" placeholder="이 항목에 대한 반영 여부 및 조치사항을 입력해주세요.">' + item.reflection + '</textarea></td>';
+      
+      tbody.appendChild(tr);
+    });
+  }
+
+  // 3. 미리보기 화면 전환
+  function showPreview() {
+    var repName = document.getElementById('repName').value.trim();
+    if(!repName) { alert("담당자 성함을 입력해주세요."); return; }
+
+    document.getElementById('previewRepName').innerText = repName;
+    
+    var tbody = document.getElementById('previewTableBody');
+    tbody.innerHTML = '';
+
+    currentSchoolData.items.forEach(function(item, index) {
+      var reflectionText = document.getElementById('reflection_' + index).value.trim();
+      currentSchoolData.items[index].reflection = reflectionText; 
+      
+      var displayImg = getPreviewUrl(item.imageUrl);
+      var imgTag = displayImg ? '<br><img src="' + displayImg + '" class="preview-img">' : '';
+      var safeContent = item.content.replace(/\n/g, '<br>');
+
+      var tr = document.createElement('tr');
+      tr.innerHTML = 
+        '<td style="text-align:center;">' + item.grade + '<br>[' + item.type + ']</td>' +
+        '<td>' + safeContent + imgTag + '</td>' +
+        '<td style="font-weight:bold; color:#2e7d32; white-space:pre-wrap;">' + reflectionText + '</td>';
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById('inputScreen').classList.add('hidden');
+    document.getElementById('previewScreen').classList.remove('hidden');
+  }
+
+  function hidePreview() {
+    document.getElementById('previewScreen').classList.add('hidden');
+    document.getElementById('inputScreen').classList.remove('hidden');
+  }
+
+  // 4. ★ PDF 파일 생성 및 다운로드 기능 추가
+  async function downloadPdf() {
+    var btn = document.getElementById('btnDownloadPdf');
+    btn.disabled = true;
+    document.getElementById('globalLoading').style.display = 'flex';
+
+    try {
+      var schoolName = currentSchoolData.schoolName;
+      var repName = document.getElementById('previewRepName').innerText;
+
+      // 1) 원본 고화질 이미지를 추출하기 위한 준비 (CORS 보안 우회)
+      var urlsToFetch = [];
+      currentSchoolData.items.forEach(function(item) {
+        if (item.imageUrl) urlsToFetch.push(item.imageUrl);
+      });
+      urlsToFetch = [...new Set(urlsToFetch)]; // 중복 제거
+
+      // 2) 서버에 Base64 이미지 변환 요청 (Code.gs 함수 활용)
+      var b64Map = {};
+      if (urlsToFetch.length > 0) {
+        b64Map = await new Promise((resolve, reject) => {
+          google.script.run
+            .withSuccessHandler(resolve)
+            .withFailureHandler(reject)
+            .getImagesBase64Mapping(urlsToFetch);
+        });
+      }
+
+      // 3) PDF에 찍힐 실제 화면(숨김 처리)을 동적으로 생성
+      var hiddenContainer = document.createElement('div');
+      hiddenContainer.style.position = 'absolute';
+      hiddenContainer.style.left = '-9999px';
+      hiddenContainer.style.top = '0';
+      hiddenContainer.style.width = '750px'; 
+      hiddenContainer.style.background = 'white';
+      hiddenContainer.style.padding = '20px';
+      hiddenContainer.style.fontFamily = 'sans-serif';
+      hiddenContainer.style.color = 'black';
+      document.body.appendChild(hiddenContainer);
+
+      var html = '<h2 style="text-align:center; margin-bottom:10px;">' + schoolName + ' 교육과정 컨설팅 결과 및 반영 내역</h2>';
+      html += '<p style="text-align:right; font-size:16px; margin-bottom:20px;"><strong>학교 담당자:</strong> ' + repName + '</p>';
+      html += '<table style="width:100%; border-collapse:collapse; text-align:left;">';
+      html += '<thead><tr>';
+      html += '<th style="border:1px solid #000; padding:10px; width:15%; background-color:#f2f2f2; text-align:center;">학년/구분</th>';
+      html += '<th style="border:1px solid #000; padding:10px; width:45%; background-color:#f2f2f2; text-align:center;">컨설팅 검토 내용</th>';
+      html += '<th style="border:1px solid #000; padding:10px; width:40%; background-color:#e8f5e9; text-align:center;">반영 결과</th>';
+      html += '</tr></thead><tbody>';
+
+      currentSchoolData.items.forEach(function(item) {
+        var imgB64 = b64Map[item.imageUrl]; // 다운로드된 Base64 데이터 삽입
+        var imgTag = imgB64 ? '<br><br><img src="' + imgB64 + '" style="max-width:100%; max-height:300px;">' : '';
+        var safeContent = item.content.replace(/\n/g, '<br>');
+
+        html += '<tr>';
+        html += '<td style="border:1px solid #000; padding:10px; text-align:center;">' + item.grade + '<br>[' + item.type + ']</td>';
+        html += '<td style="border:1px solid #000; padding:10px;">' + safeContent + imgTag + '</td>';
+        html += '<td style="border:1px solid #000; padding:10px; color:#2e7d32; white-space:pre-wrap;">' + item.reflection + '</td>';
+        html += '</tr>';
+      });
+
+      html += '</tbody></table>';
+      hiddenContainer.innerHTML = html;
+
+      // 4) HTML을 PDF로 변환
+      var opt = {
+        margin: 10,
+        filename: schoolName + '_컨설팅반영결과.pdf',
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      await html2pdf().set(opt).from(hiddenContainer).save();
+      
+      // 임시 컨테이너 삭제
+      document.body.removeChild(hiddenContainer);
+
+    } catch (e) {
+      alert("PDF 생성 중 오류가 발생했습니다: " + e.toString());
+    } finally {
+      btn.disabled = false;
+      document.getElementById('globalLoading').style.display = 'none';
+    }
+  }
+
+  // 5. 최종 반영 결과 시트에 제출
+  function submitFinalReflection() {
+    var payload = {
+      repName: document.getElementById('repName').value.trim(),
+      items: currentSchoolData.items 
+    };
+
+    alert('반영 결과를 서버에 저장 중입니다...');
+
+    google.script.run
+      .withSuccessHandler(function(response) {
+        if(response.success) {
+          alert('성공적으로 반영 결과가 제출되었습니다! 감사합니다.');
+          document.getElementById('previewScreen').classList.add('hidden');
+          document.getElementById('searchScreen').classList.remove('hidden');
+          document.getElementById('neisInput').value = '';
+          currentSchoolData = null;
+        } else {
+          alert('오류 발생: ' + response.error);
+        }
+      })
+      .submitSchoolReflection(payload);
+  }
+</script>
+
+</body>
+</html>
