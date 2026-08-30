@@ -42,6 +42,18 @@
 </head>
 <body>
 
+<!-- 1. 암호 입력 화면 -->
+<div class="container" id="passwordScreen" style="text-align: center; padding: 50px;">
+  <h2 style="border:none;">🔒 컨설팅 위원 인증</h2>
+  <p style="color:#666;">입력 권한 확인을 위해 접속 암호를 입력해주세요.</p>
+  <input type="password" id="entryPassword" placeholder="비밀번호" style="width: 200px; padding: 10px; margin-bottom: 20px; text-align:center;">
+  <br>
+  <button class="btn btn-primary" onclick="checkPassword()">확인</button>
+</div>
+
+<!-- 2. 기존 입력 화면 전체를 감싸서 처음엔 숨김 처리 -->
+<div id="mainApp" style="display: none;">
+
 <div class="container">
   
   <div id="formScreen">
@@ -374,6 +386,18 @@
     initGrades(); 
     hidePreview();
   }
+
+  // 비밀번호 확인 로직 (예: 암호를 '1234'로 설정)
+  function checkPassword() {
+    var pw = document.getElementById('entryPassword').value;
+    if (pw === '0845') { // 여기에 원하는 비밀번호를 지정하세요
+      document.getElementById('passwordScreen').style.display = 'none';
+      document.getElementById('mainApp').style.display = 'block';
+    } else {
+      alert('비밀번호가 일치하지 않습니다.');
+    }
+  }
+
 </script>
 </body>
 </html>
