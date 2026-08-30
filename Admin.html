@@ -2,7 +2,6 @@
 <html>
 <head>
   <base target="_top">
-  <!-- PDF 및 ZIP 생성용 외부 라이브러리 추가 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
@@ -10,11 +9,10 @@
   <style>
     body { font-family: 'Noto Sans KR', sans-serif; margin: 20px; background-color: #f0f2f5; }
     .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-    h2 { border-bottom: 3px solid #1976d2; padding-bottom: 10px; margin-top: 0; color: #1976d2; display: flex; justify-content: space-between; align-items: flex-end;}
-    .stat-badge { font-size: 14px; background: #e3f2fd; color: #1976d2; padding: 5px 12px; border-radius: 15px; font-weight: normal; }
+    h2 { border-bottom: 3px solid #1976d2; padding-bottom: 10px; margin-top: 0; color: #1976d2; display: flex; justify-content: space-between; align-items: center;}
+    .stat-badge { font-size: 14px; background: #e3f2fd; color: #1976d2; padding: 6px 12px; border-radius: 15px; font-weight: normal; margin-right: 10px;}
     
     .search-box { margin-bottom: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: #fafafa; padding: 15px; border-radius: 6px; border: 1px solid #ddd;}
-    
     #consultantFilter { padding: 11px; font-size: 15px; border: 1px solid #ccc; border-radius: 4px; min-width: 180px; background-color: white; cursor: pointer; }
     #searchInput { flex: 1; min-width: 250px; padding: 12px; font-size: 15px; border: 1px solid #ccc; border-radius: 4px; }
     
@@ -34,24 +32,20 @@
 
     #loadingMsg { color: #f44336; font-weight: bold; text-align: center; font-size: 18px; margin: 20px 0; }
 
-    /* 모달창 디자인 */
     .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 999; }
     .modal-content { display: none; position: fixed; top: 5%; left: 10%; width: 80%; height: 85%; background: white; z-index: 1000; padding: 30px; border-radius: 8px; overflow-y: auto; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
     .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; position: sticky; top: -30px; background: white; z-index: 10; }
     .modal-header h3 { margin: 0; font-size: 22px; }
 
-    /* 미리보기 안쪽의 표 디자인 */
     table.preview-table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
     table.preview-table th, table.preview-table td { border: 1px solid #000; padding: 15px; text-align: left; vertical-align: top; }
     table.preview-table th { background-color: #f2f2f2; text-align: center; font-weight: bold; }
     .preview-img { max-width: 450px; max-height: 350px; display: block; margin-top: 15px; border: 1px solid #ddd; border-radius: 4px; }
 
-    /* 화면 전체를 가리는 로딩 화면 (PDF 추출용) */
     #globalLoading { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; color: white; flex-direction: column; justify-content: center; align-items: center; }
     .spinner { border: 6px solid #f3f3f3; border-top: 6px solid #2196F3; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 20px; }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-    /* 인쇄용 CSS */
     @media print {
       body * { visibility: hidden; }
       #printArea, #printArea * { visibility: visible; }
@@ -71,12 +65,15 @@
 
 <div class="container no-print">
   <h2>
-    📊 컨설팅 제출 내역 관리자 대시보드
-    <span class="stat-badge" id="dataCountBadge">조회된 데이터: 0건</span>
+    <span>📊 컨설팅 제출 내역 관리자 대시보드</span>
+    <div style="font-size: 14px; font-weight: normal;">
+      <span class="stat-badge" id="dataCountBadge">조회된 데이터: 0건</span>
+      <!-- 바로가기 버튼 추가 -->
+      <button class="btn btn-purple" style="padding: 8px 15px;" onclick="goToAdminSchool()">🏫 학교 반영 현황 보기 ➔</button>
+    </div>
   </h2>
   
   <div class="search-box">
-    <!-- 위원명 필터용 드롭다운 추가 -->
     <select id="consultantFilter" onchange="applyFilters()">
       <option value="">👤 모든 위원 (전체 보기)</option>
     </select>
@@ -106,7 +103,6 @@
   </table>
 </div>
 
-<!-- 미리보기 모달창 -->
 <div class="modal-overlay" id="modalOverlay"></div>
 <div class="modal-content" id="modalContent">
   <div class="modal-header no-print">
@@ -120,10 +116,19 @@
 </div>
 
 <script>
-  let serverData = [];          // 서버에서 가져온 전체 원본 데이터
-  let currentFilteredData = []; // 필터링/검색이 적용된 현재 데이터 (미리보기, PDF 연동)
+  let serverData = [];          
+  let currentFilteredData = []; 
 
   window.onload = function() { loadData(); };
+
+  // 링크 이동 함수 (수정됨)
+  function goToAdminSchool() {
+    google.script.run
+      .withSuccessHandler(function(url) {
+        window.open(url + '?mode=admin_school', '_blank');
+      })
+      .getScriptUrl();
+  }
 
   function loadData() {
     document.getElementById('loadingMsg').style.display = 'block';
@@ -131,33 +136,23 @@
     
     google.script.run
       .withSuccessHandler(function(data) {
-        
-        // ★ 데이터 정렬 로직: 1순위 위원명 가나다순 -> 2순위 학교명 가나다순
         data.sort(function(a, b) {
-          var nameA = a.consultantName || "";
-          var nameB = b.consultantName || "";
-          var cmp = nameA.localeCompare(nameB, 'ko-KR');
-          if (cmp === 0) {
-            var schoolA = a.schoolName || "";
-            var schoolB = b.schoolName || "";
-            return schoolA.localeCompare(schoolB, 'ko-KR');
-          }
+          var cmp = (a.consultantName || "").localeCompare(b.consultantName || "", 'ko-KR');
+          if (cmp === 0) return (a.schoolName || "").localeCompare(b.schoolName || "", 'ko-KR');
           return cmp;
         });
 
         serverData = data;
-        currentFilteredData = [...data]; // 처음엔 필터 없이 원본과 동일하게 복사
-        
+        currentFilteredData = [...data];
         populateConsultantDropdown(data);
         renderTable(currentFilteredData);
       })
       .getAllDataForAdmin();
   }
 
-  // ★ 위원명 드롭다운 목록 자동 생성
   function populateConsultantDropdown(data) {
     var select = document.getElementById('consultantFilter');
-    var currentSelection = select.value; // 기존 선택값 기억
+    var currentSelection = select.value; 
     select.innerHTML = '<option value="">👤 모든 위원 (전체 보기)</option>';
     
     var uniqueNames = [...new Set(data.map(item => item.consultantName))].filter(Boolean);
@@ -167,33 +162,22 @@
       option.textContent = name;
       select.appendChild(option);
     });
-    
-    // 새로고침 시 기존 선택 유지
-    if (uniqueNames.includes(currentSelection)) {
-      select.value = currentSelection;
-    }
+    if (uniqueNames.includes(currentSelection)) select.value = currentSelection;
   }
 
-  // ★ 위원명 필터 + 텍스트 검색 동시 적용
   function applyFilters() {
     var searchInput = document.getElementById('searchInput').value.toLowerCase();
     var consultantSelect = document.getElementById('consultantFilter').value;
 
     currentFilteredData = serverData.filter(function(group) {
-      // 검색을 위한 모든 텍스트 합치기
       var groupText = (group.consultantName + " " + group.schoolName + " " + group.timestamp).toLowerCase();
-      group.items.forEach(function(item) {
-        groupText += " " + (item.grade + item.type + item.content).toLowerCase();
-      });
+      group.items.forEach(function(item) { groupText += " " + (item.grade + item.type + item.content).toLowerCase(); });
 
-      // 필터 조건 확인
       var textMatch = groupText.indexOf(searchInput) > -1;
       var consultantMatch = (consultantSelect === "") || (group.consultantName === consultantSelect);
-
       return textMatch && consultantMatch;
     });
-
-    renderTable(currentFilteredData); // 필터링된 배열로 다시 표 그리기
+    renderTable(currentFilteredData); 
   }
 
   function getCountDisplay(items, grade) {
@@ -207,8 +191,6 @@
   function renderTable(groups) {
     var tbody = document.getElementById('tableBody');
     tbody.innerHTML = '';
-    
-    // 뱃지 업데이트
     document.getElementById('dataCountBadge').innerText = "조회된 데이터: " + groups.length + "건";
     
     if(groups.length === 0) {
@@ -239,7 +221,6 @@
     return match ? 'https://drive.google.com/thumbnail?id=' + match[1] + '&sz=w1000' : url;
   }
 
-  // 모달 열기 (현재 조회된 리스트의 index 기반)
   function openPreview(index) {
     document.getElementById('modalSchoolName').innerText = currentFilteredData[index].schoolName + " 미리보기";
     generatePreviewHTML([currentFilteredData[index]]);
@@ -247,7 +228,6 @@
     document.getElementById('modalContent').style.display = 'block';
   }
 
-  // 전체 학교 일괄 모달 열기 (필터링된 결과만)
   function openBatchPreview() {
     if(currentFilteredData.length === 0) { alert("조회된 데이터가 없습니다."); return; }
     document.getElementById('modalSchoolName').innerText = "조회된 학교 일괄 미리보기";
@@ -286,29 +266,21 @@
         html += '<td><strong>[' + item.type + ']</strong><br><br>' + safeContent + imgTag + '</td>';
         html += '</tr>';
       }
-      
       html += '</tbody></table>';
       wrapper.innerHTML = html;
       printArea.appendChild(wrapper);
     }
   }
 
-  // PDF 생성 및 ZIP 다운로드 (필터링된 결과만 생성)
   async function downloadZip() {
-    if(currentFilteredData.length === 0) {
-      alert("다운로드할 데이터가 없습니다.");
-      return;
-    }
-
+    if(currentFilteredData.length === 0) { alert("다운로드할 데이터가 없습니다."); return; }
     var loadingBox = document.getElementById('globalLoading');
     var loadingText = document.getElementById('globalLoadingText');
     loadingBox.style.display = 'flex';
     
     try {
       loadingText.innerText = "1단계: 드라이브에서 이미지를 추출 중입니다... (데이터량에 따라 1~2분 소요될 수 있습니다)";
-      
       var urlsToFetch = [];
-      // 화면에 필터링 된 데이터(currentFilteredData)의 이미지만 가져옴
       currentFilteredData.forEach(group => { group.items.forEach(item => { if(item.imageUrl) urlsToFetch.push(item.imageUrl); }); });
       urlsToFetch = [...new Set(urlsToFetch)]; 
 
@@ -318,7 +290,6 @@
 
       loadingText.innerText = "2단계: 총 " + currentFilteredData.length + "개 학교의 PDF를 생성하고 있습니다...";
       var zip = new JSZip();
-
       var hiddenContainer = document.createElement('div');
       hiddenContainer.style.position = 'absolute';
       hiddenContainer.style.left = '-9999px';
@@ -352,28 +323,21 @@
 
         let opt = {
           margin: 10,
-          // 파일명에 위원명도 포함시켜 묶음 다운로드 시 관리 용이하게 구성
           filename: group.consultantName + '_' + group.schoolName + '_컨설팅결과.pdf',
           image: { type: 'jpeg', quality: 0.98 },
           html2canvas: { scale: 2 },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
-
         let pdfBlob = await html2pdf().set(opt).from(hiddenContainer.firstElementChild).output('blob');
-        
-        // zip 압축파일 내에서 위원명 이름으로 폴더를 나누어 저장
         zip.folder(group.consultantName).file(group.schoolName + "_컨설팅결과.pdf", pdfBlob);
       }
-
       document.body.removeChild(hiddenContainer);
-
       loadingText.innerText = "마무리 작업 중입니다...";
       let content = await zip.generateAsync({type:"blob"});
       saveAs(content, "중학교_컨설팅결과_다운로드.zip");
 
       loadingBox.style.display = 'none';
       alert("다운로드가 성공적으로 완료되었습니다!");
-
     } catch (error) {
       loadingBox.style.display = 'none';
       alert("오류가 발생했습니다: " + error.toString());
