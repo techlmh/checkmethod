@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body { font-family: 'Noto Sans KR', sans-serif; margin: 20px; background-color: #f5f5f5; }
+    .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    h2 { border-bottom: 2px solid #333; padding-bottom: 10px; margin-top: 0;}
+    .form-group { margin-bottom: 20px; }
+    label { font-weight: bold; display: block; margin-bottom: 5px; }
+    input[type="text"], textarea, select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+    textarea { resize: vertical; height: 90px; }
+    
+    .grade-section { border: 1px solid #e0e0e0; background: #fafafa; padding: 15px; margin-bottom: 20px; border-radius: 6px; }
+    .grade-title { font-size: 1.1em; font-weight: bold; color: #2c3e50; margin-bottom: 10px; }
+    .item-card { background: white; padding: 12px; border: 1px solid #ddd; margin-bottom: 12px; border-radius: 6px; position: relative; }
+    
+    .paste-notice { font-size: 12px; color: #666; margin-top: 4px; }
+
+    .btn { padding: 10px 18px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin-right: 5px; }
+    .btn-primary { background-color: #4CAF50; color: white; }
+    .btn-secondary { background-color: #2196F3; color: white; }
+    .btn-danger { background-color: #f44336; color: white; }
+    .btn-warning { background-color: #ff9800; color: white; }
+    .btn-gray { background-color: #777; color: white; }
+    .btn-outline { background-color: transparent; border: 1px solid #2196F3; color: #2196F3; }
+    .btn-outline:hover { background-color: #e3f2fd; }
+    
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; vertical-align: top; }
+    th { background-color: #f2f2f2; }
+    .preview-img { max-width: 250px; max-height: 200px; display: block; margin-top: 8px; border: 1px solid #ccc; border-radius: 4px; }
+    
+    .hidden { display: none; }
+    .fetch-box { background: #eef7ff; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #b6d4fe; }
+    .img-container { margin-top: 8px; position: relative; display: inline-block; }
+    .btn-img-remove { position: absolute; top: 5px; right: 5px; background: rgba(244, 67, 54, 0.8); color: white; border: none; border-radius: 3px; padding: 2px 6px; cursor: pointer; font-size: 11px; }
+    
+    #loadingMsg { display: none; color: #1976d2; font-weight: bold; margin-bottom: 10px; }
+    #editModeBadge { display: none; background-color: #ff9800; color: white; padding: 4px 8px; border-radius: 4px; font-size: 13px; margin-left: 10px; vertical-align: middle; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  
+  <div id="formScreen">
+    <h2>
+      중학교 교육과정 컨설팅 내용 입력 
+      <span id="editModeBadge">수정 모드 (제출시 기존 내용 덮어쓰기)</span>
+    </h2>
+    
+    <div class="form-group">
+      <label>1. 컨설팅 위원명</label>
+      <input type="text" id="consultantName" placeholder="위원명을 입력하세요">
+    </div>
+
+    <div class="form-group">
+      <label>2. 검토 학교명</label>
+      <input type="text" id="schoolName" placeholder="학교명을 입력하세요">
+    </div>
+
+    <div class="fetch-box">
+      <label>☁️ 작성한 내역 불러오기 (수정용)</label>
+      <div style="font-size:13px; color:#555; margin-bottom:8px;">※ 위원명과 학교명을 입력한 후 버튼을 눌러 과거 기록을 불러옵니다.</div>
+      <button type="button" class="btn btn-outline" onclick="fetchServerHistory()">시트에서 불러오기</button>
+      <button type="button" class="btn btn-gray" onclick="resetForm()">내용 전체 초기화</button>
+      
+      <div id="loadingMsg">서버에서 데이터를 검색하는 중입니다...</div>
+      
+      <div id="historyResultArea" class="hidden" style="margin-top: 10px;">
+        <select id="historySelect" style="width: 100%; padding: 8px;" onchange="loadSelectedHistory()">
+          <option value="">-- 불러올 제출 시간을 선택하세요 --</option>
+        </select>
+      </div>
+    </div>
+
+    <h3>3. 학년별 검토 내용</h3>
+    <div id="gradeContainers"></div>
+
+    <div style="text-align: center; margin-top: 30px;">
+      <button type="button" class="btn btn-secondary" onclick="showPreview()">미리보기</button>
+    </div>
+  </div>
+
+  <div id="previewScreen" class="hidden">
+    <h2>검토 내용 미리보기</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 25%;">A. 학교명</th>
+          <th style="width: 20%;">B. 학년 구분</th>
+          <th style="width: 55%;">C. 검토 내용 및 사진</th>
+        </tr>
+      </thead>
+      <tbody id="previewTableBody">
+      </tbody>
+    </table>
+
+    <div style="text-align: center; margin-top: 30px;">
+      <button type="button" class="btn btn-gray" onclick="hidePreview()">수정하기(이전 화면)</button>
+      <button type="button" class="btn btn-primary" onclick="submitFinalData()">제출하기</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  var grades = ["1학년", "2학년", "3학년", "학년전체"];
+  var serverHistory = [];
+  var currentEditTimestamp = null; // 현재 수정 중인 원본의 제출 시간 기록
+
+  function initGrades() {
+    var container = document.getElementById('gradeContainers');
+    if (!container) return;
+    container.innerHTML = ''; 
+    
+    for (var i = 0; i < grades.length; i++) {
+      var grade = grades[i];
+      var div = document.createElement('div');
+      div.className = 'grade-section';
+      div.innerHTML = 
+        '<div class="grade-title">📌 ' + grade + '</div>' +
+        '<div id="items-' + grade + '"></div>' +
+        '<button type="button" class="btn btn-gray" onclick="addItem(\'' + grade + '\', \'수정\', \'\', \'\', \'\')">+ 검토항목 추가</button>';
+      container.appendChild(div);
+    }
+  }
+
+  // 화면 진입 시 무조건 영역 그리기
+  initGrades();
+
+  // 구글 드라이브 URL을 이미지 태그에서 볼 수 있도록 변환
+  function getPreviewUrl(url) {
+    if (!url) return '';
+    // 구글 드라이브 파일 ID 추출 정규식
+    var match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      return 'https://drive.google.com/uc?id=' + match[1];
+    }
+    return url;
+  }
+
+  function addItem(grade, type, content, imageBase64, imageUrl) {
+    var parent = document.getElementById('items-' + grade);
+    if (!parent) return;
+
+    var itemId = 'item_' + new Date().getTime() + '_' + Math.random().toString(36).substr(2, 4);
+    var displayImgSrc = imageBase64 || getPreviewUrl(imageUrl) || '';
+    var isImgHidden = displayImgSrc ? '' : 'hidden';
+
+    var card = document.createElement('div');
+    card.className = 'item-card';
+    card.setAttribute('data-grade', grade);
+    card.setAttribute('data-id', itemId);
+
+    var typeSelect = 
+      '<select class="item-type" style="width:120px;">' +
+        '<option value="수정" ' + (type === '수정' ? 'selected' : '') + '>수정</option>' +
+        '<option value="검토의견" ' + (type === '검토의견' ? 'selected' : '') + '>검토의견</option>' +
+      '</select>';
+
+    card.innerHTML = 
+      '<div style="display:flex; gap:10px; margin-bottom:8px; align-items: center;">' +
+        typeSelect +
+        '<button type="button" class="btn btn-danger" style="padding:3px 10px; margin-left:auto; font-size:12px;" onclick="this.parentElement.parentElement.remove()">삭제</button>' +
+      '</div>' +
+      '<textarea class="item-content" placeholder="검토 내용을 입력하세요 (캡처한 이미지를 Ctrl+V로 붙여넣을 수 있습니다)">' + content + '</textarea>' +
+      '<div class="paste-notice">💡 이미지 첨부: 텍스트 상자 안에서 캡처 이미지 붙여넣기(Ctrl+V) 또는 아래 파일선택</div>' +
+      '<div style="margin-top:8px;">' +
+        '<input type="file" class="item-image" accept="image/*" onchange="handleImageFileSelect(event, \'' + itemId + '\')">' +
+      '</div>' +
+      '<input type="hidden" class="item-img-base64" value="' + imageBase64 + '">' +
+      '<input type="hidden" class="item-img-url" value="' + imageUrl + '">' +
+      '<div class="img-container ' + isImgHidden + '" id="img-box-' + itemId + '">' +
+        '<button type="button" class="btn-img-remove" onclick="removeImage(\'' + itemId + '\')">이미지 삭제</button>' +
+        '<img id="preview-img-' + itemId + '" class="preview-img" src="' + displayImgSrc + '">' +
+      '</div>';
+      
+    parent.appendChild(card);
+
+    var textarea = card.querySelector('.item-content');
+    textarea.addEventListener('paste', function(e) {
+      var items = (e.clipboardData || e.originalEvent.clipboardData).items;
+      for (var j = 0; j < items.length; j++) {
+        if (items[j].type.indexOf('image') !== -1) {
+          var blob = items[j].getAsFile();
+          var reader = new FileReader();
+          reader.onload = function(event) {
+            setImageData(itemId, event.target.result);
+          };
+          reader.readAsDataURL(blob);
+          e.preventDefault();
+          break;
+        }
+      }
+    });
+  }
+
+  function handleImageFileSelect(event, itemId) {
+    var file = event.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(e) { setImageData(itemId, e.target.result); };
+    reader.readAsDataURL(file);
+  }
+
+  function setImageData(itemId, base64Data) {
+    var card = document.querySelector('[data-id="' + itemId + '"]');
+    card.querySelector('.item-img-base64').value = base64Data;
+    card.querySelector('.item-img-url').value = ''; // 새로 올리면 기존 링크 삭제
+    var imgBox = document.getElementById('img-box-' + itemId);
+    document.getElementById('preview-img-' + itemId).src = base64Data;
+    imgBox.classList.remove('hidden');
+  }
+
+  function removeImage(itemId) {
+    var card = document.querySelector('[data-id="' + itemId + '"]');
+    card.querySelector('.item-img-base64').value = '';
+    card.querySelector('.item-img-url').value = '';
+    card.querySelector('.item-image').value = '';
+    document.getElementById('img-box-' + itemId).classList.add('hidden');
+  }
+
+  function getAllInputData() {
+    var items = [];
+    var cards = document.querySelectorAll('.item-card');
+    for(var i=0; i<cards.length; i++) {
+      var card = cards[i];
+      var grade = card.getAttribute('data-grade');
+      var type = card.querySelector('.item-type').value;
+      var content = card.querySelector('.item-content').value;
+      var imageBase64 = card.querySelector('.item-img-base64').value;
+      var imageUrl = card.querySelector('.item-img-url').value;
+
+      if (content.trim() || imageBase64 || imageUrl) {
+        items.push({ grade: grade, type: type, content: content, imageBase64: imageBase64, imageUrl: imageUrl });
+      }
+    }
+    return items;
+  }
+
+  function showPreview() {
+    var consultantName = document.getElementById('consultantName').value.trim();
+    var schoolName = document.getElementById('schoolName').value.trim();
+
+    if (!consultantName || !schoolName) {
+      alert('위원명과 학교명을 모두 입력해주세요.');
+      return;
+    }
+    var items = getAllInputData();
+    if (items.length === 0) {
+      alert('최소 하나 이상의 검토 내용을 입력해주세요.');
+      return;
+    }
+
+    var tbody = document.getElementById('previewTableBody');
+    tbody.innerHTML = '';
+
+    for(var i=0; i<items.length; i++) {
+      var item = items[i];
+      var displayImg = item.imageBase64 || getPreviewUrl(item.imageUrl);
+      var tr = document.createElement('tr');
+      
+      var imgTag = displayImg ? '<br><img src="' + displayImg + '" class="preview-img">' : '';
+      var safeContent = item.content.replace(/\n/g, '<br>');
+
+      tr.innerHTML = 
+        '<td>' + (i === 0 ? schoolName : '') + '</td>' +
+        '<td>' + item.grade + '</td>' +
+        '<td><strong>[' + item.type + ']</strong><br>' + safeContent + imgTag + '</td>';
+      tbody.appendChild(tr);
+    }
+
+    document.getElementById('formScreen').classList.add('hidden');
+    document.getElementById('previewScreen').classList.remove('hidden');
+  }
+
+  function hidePreview() {
+    document.getElementById('previewScreen').classList.add('hidden');
+    document.getElementById('formScreen').classList.remove('hidden');
+  }
+
+  function submitFinalData() {
+    // payload에 현재 수정 중인 타임스탬프를 포함시킴 (덮어쓰기 용도)
+    var payload = {
+      consultantName: document.getElementById('consultantName').value.trim(),
+      schoolName: document.getElementById('schoolName').value.trim(),
+      items: getAllInputData(),
+      originalTimestamp: currentEditTimestamp 
+    };
+
+    alert(currentEditTimestamp ? '기존 데이터를 덮어쓰며 제출 중입니다...' : '구글 시트로 데이터를 제출 중입니다...');
+
+    google.script.run
+      .withSuccessHandler(function(response) {
+        if (response.success) {
+          alert('성공적으로 제출(저장)되었습니다!');
+          resetForm();
+        } else {
+          alert('제출 실패: ' + response.error);
+        }
+      })
+      .submitData(payload);
+  }
+
+  function fetchServerHistory() {
+    var consultantName = document.getElementById('consultantName').value.trim();
+    var schoolName = document.getElementById('schoolName').value.trim();
+
+    if (!consultantName || !schoolName) {
+      alert('불러오기를 진행하려면 위원명과 학교명을 정확히 입력해야 합니다.');
+      return;
+    }
+
+    document.getElementById('loadingMsg').style.display = 'block';
+    document.getElementById('historyResultArea').classList.add('hidden');
+    
+    google.script.run
+      .withSuccessHandler(function(data) {
+        document.getElementById('loadingMsg').style.display = 'none';
+        serverHistory = data;
+        
+        if(serverHistory.length === 0) {
+          alert('일치하는 내역이 없습니다.');
+          return;
+        }
+
+        var select = document.getElementById('historySelect');
+        select.innerHTML = '<option value="">-- 불러올 제출 시간을 선택하세요 --</option>';
+        for(var i=0; i<serverHistory.length; i++) {
+          var option = document.createElement('option');
+          option.value = i;
+          option.textContent = '[제출됨] ' + serverHistory[i].timestamp;
+          select.appendChild(option);
+        }
+
+        document.getElementById('historyResultArea').classList.remove('hidden');
+        alert(serverHistory.length + '건의 데이터를 불러왔습니다. 드롭다운에서 선택해주세요.');
+      })
+      .getServerHistory(consultantName, schoolName);
+  }
+
+  function loadSelectedHistory() {
+    var index = document.getElementById('historySelect').value;
+    if (index === "") return;
+
+    var record = serverHistory[index];
+    
+    // 수정 모드 돌입: 수정 대상의 Timestamp를 변수에 기록하고 뱃지 표시
+    currentEditTimestamp = record.timestamp;
+    document.getElementById('editModeBadge').style.display = 'inline-block';
+
+    initGrades(); // 학년 영역 완전히 새로고침
+
+    if (record.items && record.items.length > 0) {
+      for(var i=0; i<record.items.length; i++) {
+        var item = record.items[i];
+        addItem(item.grade, item.type, item.content, item.imageBase64, item.imageUrl);
+      }
+    }
+    hidePreview();
+  }
+
+  function resetForm() {
+    document.getElementById('consultantName').value = '';
+    document.getElementById('schoolName').value = '';
+    document.getElementById('historyResultArea').classList.add('hidden');
+    
+    // 수정 모드 초기화
+    currentEditTimestamp = null;
+    document.getElementById('editModeBadge').style.display = 'none';
+
+    initGrades(); 
+    hidePreview();
+  }
+</script>
+</body>
+</html>
