@@ -8,7 +8,7 @@
     h2 { border-bottom: 2px solid #333; padding-bottom: 10px; margin-top: 0;}
     .form-group { margin-bottom: 20px; }
     label { font-weight: bold; display: block; margin-bottom: 5px; }
-    input[type="text"], textarea, select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+    input[type="text"], input[type="password"], textarea, select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
     textarea { resize: vertical; height: 90px; }
     
     .grade-section { border: 1px solid #e0e0e0; background: #fafafa; padding: 15px; margin-bottom: 20px; border-radius: 6px; }
@@ -18,7 +18,7 @@
     .paste-notice { font-size: 12px; color: #666; margin-top: 4px; }
 
     .btn { padding: 10px 18px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; margin-right: 5px; }
-    .btn-primary { background-color: #4CAF50; color: white; }
+    .btn-primary { background-color: #4CAF50; color: white; font-weight: bold; }
     .btn-secondary { background-color: #2196F3; color: white; }
     .btn-danger { background-color: #f44336; color: white; }
     .btn-warning { background-color: #ff9800; color: white; }
@@ -33,8 +33,8 @@
     
     .hidden { display: none; }
     .fetch-box { background: #eef7ff; padding: 15px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #b6d4fe; }
-    .img-container { margin-top: 8px; position: relative; display: inline-block; }
-    .btn-img-remove { position: absolute; top: 5px; right: 5px; background: rgba(244, 67, 54, 0.8); color: white; border: none; border-radius: 3px; padding: 2px 6px; cursor: pointer; font-size: 11px; }
+    .img-container { margin-top: 8px; position: relative; display: inline-block; min-height: 40px; }
+    .btn-img-remove { position: absolute; top: 5px; right: 5px; background: rgba(244, 67, 54, 0.8); color: white; border: none; border-radius: 3px; padding: 2px 6px; cursor: pointer; font-size: 11px; z-index: 10; }
     
     #loadingMsg { display: none; color: #1976d2; font-weight: bold; margin-bottom: 10px; }
     #editModeBadge { display: none; background-color: #ff9800; color: white; padding: 4px 8px; border-radius: 4px; font-size: 13px; margin-left: 10px; vertical-align: middle; }
@@ -42,85 +42,94 @@
 </head>
 <body>
 
-<!-- 1. 암호 입력 화면 -->
-<div class="container" id="passwordScreen" style="text-align: center; padding: 50px;">
-  <h2 style="border:none;">🔒 컨설팅 위원 인증</h2>
-  <p style="color:#666;">입력 권한 확인을 위해 접속 암호를 입력해주세요.</p>
-  <input type="password" id="entryPassword" placeholder="비밀번호" style="width: 200px; padding: 10px; margin-bottom: 20px; text-align:center;">
+<div class="container" id="passwordScreen" style="text-align: center; padding: 60px 20px;">
+  <h2 style="border:none; color: #1976d2;">🔒 컨설팅 위원 인증</h2>
+  <p style="color:#555; font-size:15px; margin-bottom: 30px;">입력 권한 확인을 위해 위원 전용 접속 암호를 입력해주세요.</p>
+  <input type="password" id="entryPassword" placeholder="비밀번호 입력" style="width: 250px; padding: 12px; font-size: 16px; margin-bottom: 20px; text-align:center;" onkeypress="if(event.keyCode===13) checkPassword()">
   <br>
-  <button class="btn btn-primary" onclick="checkPassword()">확인</button>
+  <button class="btn btn-primary" style="width: 250px; padding: 12px; font-size: 16px;" onclick="checkPassword()">확인 및 접속</button>
 </div>
 
-<!-- 2. 기존 입력 화면 전체를 감싸서 처음엔 숨김 처리 -->
 <div id="mainApp" style="display: none;">
 
-<div class="container">
-  
-  <div id="formScreen">
-    <h2>
-      중학교 교육과정 컨설팅 내용 입력 
-      <span id="editModeBadge">수정 모드 (제출시 기존 내용 덮어쓰기)</span>
-    </h2>
-    
-    <div class="form-group">
-      <label>1. 컨설팅 위원명</label>
-      <input type="text" id="consultantName" placeholder="위원명을 입력하세요">
-    </div>
-
-    <div class="form-group">
-      <label>2. 검토 학교명</label>
-      <input type="text" id="schoolName" placeholder="학교명을 입력하세요">
-    </div>
-
-    <div class="fetch-box">
-      <label>☁️ 작성한 내역 불러오기 (수정용)</label>
-      <div style="font-size:13px; color:#555; margin-bottom:8px;">※ 위원명과 학교명을 입력한 후 버튼을 눌러 과거 기록을 불러옵니다.</div>
-      <button type="button" class="btn btn-outline" onclick="fetchServerHistory()">시트에서 불러오기</button>
-      <button type="button" class="btn btn-gray" onclick="resetForm()">내용 전체 초기화</button>
+  <div class="container">
+    <div id="formScreen">
+      <h2>
+        중학교 교육과정 컨설팅 내용 입력 
+        <span id="editModeBadge">수정 모드 (제출시 기존 내용 덮어쓰기)</span>
+      </h2>
       
-      <div id="loadingMsg">서버에서 데이터를 검색하는 중입니다...</div>
-      
-      <div id="historyResultArea" class="hidden" style="margin-top: 10px;">
-        <select id="historySelect" style="width: 100%; padding: 8px;" onchange="loadSelectedHistory()">
-          <option value="">-- 불러올 제출 시간을 선택하세요 --</option>
-        </select>
+      <div class="form-group">
+        <label>1. 컨설팅 위원명</label>
+        <input type="text" id="consultantName" placeholder="위원명을 입력하세요">
+      </div>
+
+      <div class="form-group">
+        <label>2. 검토 학교명</label>
+        <input type="text" id="schoolName" placeholder="학교명을 입력하세요">
+      </div>
+
+      <div class="fetch-box">
+        <label>☁️ 작성한 내역 불러오기 (수정용)</label>
+        <div style="font-size:13px; color:#555; margin-bottom:8px;">※ 위원명과 학교명을 입력한 후 버튼을 눌러 과거 기록을 불러옵니다.</div>
+        <button type="button" class="btn btn-outline" onclick="fetchServerHistory()">시트에서 불러오기</button>
+        <button type="button" class="btn btn-gray" onclick="resetForm()">내용 전체 초기화</button>
+        
+        <div id="loadingMsg">서버에서 데이터를 검색하는 중입니다...</div>
+        
+        <div id="historyResultArea" class="hidden" style="margin-top: 10px;">
+          <select id="historySelect" style="width: 100%; padding: 8px;" onchange="loadSelectedHistory()">
+            <option value="">-- 불러올 제출 시간을 선택하세요 --</option>
+          </select>
+        </div>
+      </div>
+
+      <h3>3. 학년별 검토 내용</h3>
+      <div id="gradeContainers"></div>
+
+      <div style="text-align: center; margin-top: 30px;">
+        <button type="button" class="btn btn-secondary" onclick="showPreview()">미리보기</button>
       </div>
     </div>
 
-    <h3>3. 학년별 검토 내용</h3>
-    <div id="gradeContainers"></div>
+    <div id="previewScreen" class="hidden">
+      <h2>검토 내용 미리보기</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 25%;">A. 학교명</th>
+            <th style="width: 20%;">B. 학년 구분</th>
+            <th style="width: 55%;">C. 검토 내용 및 사진</th>
+          </tr>
+        </thead>
+        <tbody id="previewTableBody">
+        </tbody>
+      </table>
 
-    <div style="text-align: center; margin-top: 30px;">
-      <button type="button" class="btn btn-secondary" onclick="showPreview()">미리보기</button>
+      <div style="text-align: center; margin-top: 30px;">
+        <button type="button" class="btn btn-gray" onclick="hidePreview()">수정하기(이전 화면)</button>
+        <button type="button" class="btn btn-primary" onclick="submitFinalData()">제출하기</button>
+      </div>
     </div>
   </div>
 
-  <div id="previewScreen" class="hidden">
-    <h2>검토 내용 미리보기</h2>
-    <table>
-      <thead>
-        <tr>
-          <th style="width: 25%;">A. 학교명</th>
-          <th style="width: 20%;">B. 학년 구분</th>
-          <th style="width: 55%;">C. 검토 내용 및 사진</th>
-        </tr>
-      </thead>
-      <tbody id="previewTableBody">
-      </tbody>
-    </table>
-
-    <div style="text-align: center; margin-top: 30px;">
-      <button type="button" class="btn btn-gray" onclick="hidePreview()">수정하기(이전 화면)</button>
-      <button type="button" class="btn btn-primary" onclick="submitFinalData()">제출하기</button>
-    </div>
-  </div>
-
-</div>
+</div> 
 
 <script>
+  function checkPassword() {
+    var pw = document.getElementById('entryPassword').value;
+    if (pw === '0845') { 
+      document.getElementById('passwordScreen').style.display = 'none';
+      document.getElementById('mainApp').style.display = 'block';
+      initGrades();
+    } else {
+      alert('비밀번호가 일치하지 않습니다.');
+    }
+  }
+
   var grades = ["1학년", "2학년", "3학년", "학년전체"];
   var serverHistory = [];
-  var currentEditTimestamp = null; // 현재 수정 중인 원본의 제출 시간 기록
+  var currentEditTimestamp = null; 
 
   function initGrades() {
     var container = document.getElementById('gradeContainers');
@@ -139,16 +148,12 @@
     }
   }
 
-  // 화면 진입 시 무조건 영역 그리기
-  initGrades();
-
-  // 구글 드라이브 URL을 이미지 태그에서 볼 수 있도록 변환
+  // ★ 수정된 부분: 과거의 'id=' 방식과 최근의 '/d/' 방식을 모두 매칭하여 썸네일 주소로 변환
   function getPreviewUrl(url) {
     if (!url) return '';
-    // 구글 드라이브 파일 ID 추출 정규식
-    var match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    var match = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
     if (match && match[1]) {
-      return 'https://drive.google.com/uc?id=' + match[1];
+      return 'https://drive.google.com/thumbnail?id=' + match[1] + '&sz=w1000';
     }
     return url;
   }
@@ -186,7 +191,7 @@
       '<input type="hidden" class="item-img-url" value="' + imageUrl + '">' +
       '<div class="img-container ' + isImgHidden + '" id="img-box-' + itemId + '">' +
         '<button type="button" class="btn-img-remove" onclick="removeImage(\'' + itemId + '\')">이미지 삭제</button>' +
-        '<img id="preview-img-' + itemId + '" class="preview-img" src="' + displayImgSrc + '">' +
+        '<img id="preview-img-' + itemId + '" class="preview-img" src="' + displayImgSrc + '" onerror="this.style.display=\'none\'">' +
       '</div>';
       
     parent.appendChild(card);
@@ -220,9 +225,11 @@
   function setImageData(itemId, base64Data) {
     var card = document.querySelector('[data-id="' + itemId + '"]');
     card.querySelector('.item-img-base64').value = base64Data;
-    card.querySelector('.item-img-url').value = ''; // 새로 올리면 기존 링크 삭제
+    card.querySelector('.item-img-url').value = ''; 
     var imgBox = document.getElementById('img-box-' + itemId);
-    document.getElementById('preview-img-' + itemId).src = base64Data;
+    var previewImg = document.getElementById('preview-img-' + itemId);
+    previewImg.src = base64Data;
+    previewImg.style.display = 'block';
     imgBox.classList.remove('hidden');
   }
 
@@ -294,7 +301,6 @@
   }
 
   function submitFinalData() {
-    // payload에 현재 수정 중인 타임스탬프를 포함시킴 (덮어쓰기 용도)
     var payload = {
       consultantName: document.getElementById('consultantName').value.trim(),
       schoolName: document.getElementById('schoolName').value.trim(),
@@ -359,11 +365,10 @@
 
     var record = serverHistory[index];
     
-    // 수정 모드 돌입: 수정 대상의 Timestamp를 변수에 기록하고 뱃지 표시
     currentEditTimestamp = record.timestamp;
     document.getElementById('editModeBadge').style.display = 'inline-block';
 
-    initGrades(); // 학년 영역 완전히 새로고침
+    initGrades(); 
 
     if (record.items && record.items.length > 0) {
       for(var i=0; i<record.items.length; i++) {
@@ -379,25 +384,12 @@
     document.getElementById('schoolName').value = '';
     document.getElementById('historyResultArea').classList.add('hidden');
     
-    // 수정 모드 초기화
     currentEditTimestamp = null;
     document.getElementById('editModeBadge').style.display = 'none';
 
     initGrades(); 
     hidePreview();
   }
-
-  // 비밀번호 확인 로직 (예: 암호를 '1234'로 설정)
-  function checkPassword() {
-    var pw = document.getElementById('entryPassword').value;
-    if (pw === '0845') { // 여기에 원하는 비밀번호를 지정하세요
-      document.getElementById('passwordScreen').style.display = 'none';
-      document.getElementById('mainApp').style.display = 'block';
-    } else {
-      alert('비밀번호가 일치하지 않습니다.');
-    }
-  }
-
 </script>
 </body>
 </html>
