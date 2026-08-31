@@ -58,6 +58,7 @@ Google Apps Script(GAS)를 활용하여 구축된 **웹 기반 컨설팅 의견 
 ### Step 2. Apps Script 코드 적용
 1. 생성한 스프레드시트에서 `[확장 프로그램] > [Apps Script]`를 클릭합니다.
 2. 본 저장소의 파일들(`Code.gs`, `Index.html`, `Admin.html`, `AdminSchool.html`, `School.html`)을 복사하여 동일한 이름으로 생성하고 붙여넣습니다.
+  2-1. 변경 사항: `Code.gs`내 `Folder ID`, `Index.html`, `Admin.html`, `AdminSchool.html` 내 암호
 3. `Code.gs` 파일 내의 `var folderId = "YOUR_FOLDER_ID_HERE";` 부분을 Step 1에서 복사한 **구글 드라이브 폴더 ID**로 교체합니다.
 
 ### Step 3. 배포 및 권한 승인
